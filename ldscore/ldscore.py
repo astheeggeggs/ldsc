@@ -132,8 +132,7 @@ class __GenotypeArrayInMemory__(object):
     def __l2_unbiased__(self, x, n):
         denom = n-2 if n > 2 else n  # allow n<2 for testing purposes
         sq = np.square(x)
-        return sq - 1/n
-        # return sq - (1-sq) / denom
+        return sq - (1-sq) / denom
 
     # general methods for calculating sums of Pearson correlation coefficients
     def __corSumVarBlocks__(self, block_left, c, func, snp_getter, annot=None):
@@ -166,8 +165,8 @@ class __GenotypeArrayInMemory__(object):
         '''
         m, n = self.m, self.n
         block_sizes = np.array(np.arange(m) - block_left)
-        block_sizes = (np.ceil(block_sizes / c)*c).astype(int)
-        if not np.any(annot):
+        block_sizes = np.ceil(block_sizes / c)*c
+        if annot is None:
             annot = np.ones((m, 1))
         else:
             annot_m = annot.shape[0]
@@ -195,8 +194,6 @@ class __GenotypeArrayInMemory__(object):
             B = A[:, l_B:l_B+c]
             np.dot(A.T, B / n, out=rfuncAB)
             rfuncAB = func(rfuncAB)
-            # if l_B == 0:
-            #     print rfuncAB
             cor_sum[l_A:l_A+b, :] += np.dot(rfuncAB, annot[l_B:l_B+c, :])
         # chunk to right of block
         b0 = b
@@ -207,7 +204,7 @@ class __GenotypeArrayInMemory__(object):
             # this happens w/ sparse categories (i.e., pathways)
             # update the block
             old_b = b
-            b = block_sizes[l_B]
+            b = int(block_sizes[l_B])
             if l_B > b0 and b > 0:
                 # block_size can't increase more than c
                 # block_size can't be less than c unless it is zero
@@ -241,7 +238,6 @@ class __GenotypeArrayInMemory__(object):
             rfuncBB = func(rfuncBB)
             cor_sum[l_B:l_B+c, :] += np.dot(rfuncBB, annot[l_B:l_B+c, :])
 
-        print cor_sum
         return cor_sum
 
 
@@ -298,6 +294,7 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
         nru_new = n_new + e
         nru = self.nru
         z = ba.bitarray(m*2*nru_new, endian="little")
+	z.setall(0)
         for e, i in enumerate(keep_indivs):
             z[2*e::2*nru_new] = geno[2*i::2*nru]
             z[2*e+1::2*nru_new] = geno[2*i+1::2*nru]
@@ -400,7 +397,6 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
         X = np.array(slice.decode(self._bedcode), dtype="float64").reshape((b, nru)).T
         X = X[0:n, :]
         Y = np.zeros(X.shape)
-
         for j in xrange(0, b):
             newsnp = X[:, j]
             ii = newsnp != 9
@@ -416,5 +412,4 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
             Y[:, j] = (newsnp - avg) / denom
 
         self._currentSNP += b
-
         return Y
