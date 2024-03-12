@@ -282,7 +282,7 @@ def _read_ld_sumstats(args, log, fh, alleles=False, dropna=True):
         w_ld_nudge_cname = 'nudge_weights'
         sumstats['LD_weights'] = sumstats['LD_weights'] + \
             (sumstats['nudge_weights'] / sumstats['N'])
-        sumstats = sumstats.drop(columns=['nudge_weights'])
+        sumstats = sumstats.drop('nudge_weights', axis=1)
         for l2_col in ref_ld_cnames:
             nudge_col = l2_col.replace('L2','nudge')
             sumstats[l2_col] = sumstats[l2_col] + \
