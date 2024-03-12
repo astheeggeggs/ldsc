@@ -99,6 +99,7 @@ def sumstats(fh, alleles=False, dropna=True):
 def ldscore_fromlist(flist, num=None):
     '''Sideways concatenation of a list of LD Score files.'''
     ldscore_array = []
+
     for i, fh in enumerate(flist):
         y = ldscore(fh, num)
         if i > 0:
@@ -112,6 +113,38 @@ def ldscore_fromlist(flist, num=None):
         ldscore_array.append(y)
 
     return pd.concat(ldscore_array, axis=1)
+
+
+def ldscore_nudge_fromlist(flist, num=None, gxe_file=None):
+    '''Sideways concatenation of a list of LD Score files.'''
+    ldscore_nudge_array = []
+
+    for i, fh in enumerate(flist):
+        if gxe_file is None:
+            raise ValueError('gxe file must be passed if using the gxe flag')
+        kurt = read_csv(gxe_file, header=None).to_numpy()[:,0]
+        # Evaluate m - this should be changed to common=False, when we have the right files.
+        m = M(fh, num, common=False)
+        chrs = get_present_chrs(fh, num+1)
+        if kurt.size == 1:
+            nudge = np.ones(len(chrs)) * (kurt - 1) * m
+        elif kurt.size != len(chrs):
+            raise ValueError('Kurtosis vector must be of length 1 or number of chromosomes')
+        else:
+            nudge = (kurt - 1) * m
+        y_nudge = ldscore_nudge(fh, nudge[0,:], num)
+
+        if i > 0:
+            if not series_eq(y_nudge.SNP, ldscore_array[0].SNP):
+                raise ValueError('LD Scores for concatenation must have identical SNP columns.')
+            else:  # keep SNP column from only the first file
+                y_nudge = y_nudge.drop(['SNP'], axis=1)
+
+        new_col_dict = {c: c + '_' + str(i) for c in y_nudge.columns if c != 'SNP'}
+        y_nudge.rename(columns=new_col_dict, inplace=True)
+        ldscore_nudge_array.append(y_nudge)
+
+    return pd.concat(ldscore_nudge_array, axis=1)
 
 
 def l2_parser(fh, compression):
@@ -139,7 +172,7 @@ def frq_parser(fh, compression):
     return df[['SNP', 'FRQ']]
 
 
-def ldscore(fh, num=None):
+def ldscore(fh, num=None, scaling=None):
     '''Parse .l2.ldscore files, split across num chromosomes. See docs/file_formats_ld.txt.'''
     suffix = '.l2.ldscore'
     if num is not None:  # num files, e.g., one per chromosome
@@ -151,6 +184,27 @@ def ldscore(fh, num=None):
     else:  # just one file
         s, compression = which_compression(fh + suffix)
         x = l2_parser(fh + suffix + s, compression)
+
+    x = x.sort_values(by=['CHR', 'BP']) # SEs will be wrong unless sorted
+    x = x.drop(['CHR', 'BP'], axis=1).drop_duplicates(subset='SNP')
+    return x
+
+
+def ldscore_nudge(fh, nudge, num=None):
+    '''Parse .l2.ldscore files, split across num chromosomes. See docs/file_formats_ld.txt.'''
+    suffix = '.l2.ldscore'
+    if num is not None:  # num files, e.g., one per chromosome
+        chrs = get_present_chrs(fh, num+1)
+        first_fh = sub_chr(fh, chrs[0]) + suffix
+        s, compression = which_compression(first_fh)
+        chr_ld = [l2_parser(sub_chr(fh, i) + suffix + s, compression) for i in chrs]
+        for i in chrs:
+            chr_ld[i-1]['nudge'] = np.ones(len(chr_ld[i-1])) * nudge[i-1]
+        x = pd.concat(chr_ld)  # automatically sorted by chromosome
+    else:  # just one file
+        s, compression = which_compression(fh + suffix)
+        x = l2_parser(fh + suffix + s, compression)
+        x['nudge'] = np.ones(len(x)) * nudge
 
     x = x.sort_values(by=['CHR', 'BP']) # SEs will be wrong unless sorted
     x = x.drop(['CHR', 'BP'], axis=1).drop_duplicates(subset='SNP')

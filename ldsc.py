@@ -578,6 +578,11 @@ parser.add_argument('--samp-prev',default=None,
 parser.add_argument('--pop-prev',default=None,
     help='Population prevalence of binary phenotype (for conversion to liability scale).')
 
+parser.add_argument('--gxe',default=False, action='store_true',
+    help='Are we running a gxe test?')
+parser.add_argument('--gxe-file', default=None, type=str,
+    help='File containing Kurtosis of the covariate')
+
 if __name__ == '__main__':
 
     args = parser.parse_args()

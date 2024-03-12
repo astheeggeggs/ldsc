@@ -85,6 +85,16 @@ def _read_ref_ld(args, log):
     return ref_ld
 
 
+def _read_ref_ld_nudge(args, log):
+    '''Read reference LD Scores.'''
+    ref_ld_nudge = _read_chr_split_files(args.ref_ld_chr, args.ref_ld, log,
+                                   'reference panel LD Score', ps.ldscore_nudge_fromlist,
+                                   gxe_file=args.gxe_file)
+    log.log(
+        'Read reference panel LD Scores for {N} SNPs.'.format(N=len(ref_ld_nudge)))
+    return ref_ld_nudge
+
+
 def _read_annot(args, log):
     '''Read annot matrix.'''
     try:
@@ -138,6 +148,22 @@ def _read_w_ld(args, log):
     log.log(
         'Read regression weight LD Scores for {N} SNPs.'.format(N=len(w_ld)))
     return w_ld
+
+
+def _read_w_ld_nudge(args, log):
+    '''Read regression SNP LD.'''
+    if (args.w_ld and ',' in args.w_ld) or (args.w_ld_chr and ',' in args.w_ld_chr):
+        raise ValueError(
+            '--w-ld must point to a single fileset (no commas allowed).')
+    w_ld_nudge = _read_chr_split_files(args.w_ld_chr, args.w_ld, log,
+                                 'regression weight LD Score', ps.ldscore_nudge_fromlist,
+                                 gxe_file=args.gxe_file)
+    if len(w_ld_nudge.columns) != 3:
+        raise ValueError('--w-ld may only have one LD Score column and one nudge column.')
+    w_ld_nudge.columns = ['SNP', 'LD_weights', 'nudge_weights']  # prevent colname conflicts w/ ref ld
+    log.log(
+        'Read regression weight LD Scores for {N} SNPs.'.format(N=len(w_ld_nudge)))
+    return w_ld_nudge
 
 
 def _read_chr_split_files(chr_arg, not_chr_arg, log, noun, parsefunc, **kwargs):
@@ -241,14 +267,30 @@ def _merge_and_log(ld, sumstats, noun, log):
 def _read_ld_sumstats(args, log, fh, alleles=False, dropna=True):
     sumstats = _read_sumstats(args, log, fh, alleles=alleles, dropna=dropna)
     ref_ld = _read_ref_ld(args, log)
+    ref_ld_cnames = ref_ld.columns[1:len(ref_ld.columns)]
+    if args.gxe:
+        ref_ld_nudge = _read_ref_ld_nudge(args, log)
     n_annot = len(ref_ld.columns) - 1
     M_annot = _read_M(args, log, n_annot)
     M_annot, ref_ld, novar_cols = _check_variance(log, M_annot, ref_ld)
     w_ld = _read_w_ld(args, log)
-    sumstats = _merge_and_log(ref_ld, sumstats, 'reference panel LD', log)
-    sumstats = _merge_and_log(sumstats, w_ld, 'regression SNP LD', log)
+    if args.gxe:
+        w_ld_nudge = _read_w_ld_nudge(args, log)
+        sumstats = _merge_and_log(ref_ld_nudge, sumstats, 'reference panel LD', log)
+        sumstats = _merge_and_log(sumstats, w_ld_nudge, 'regression SNP LD', log)
+        w_ld_cname = 'LD_weights'
+        w_ld_nudge_cname = 'nudge_weights'
+        sumstats['LD_weights'] = sumstats['LD_weights'] + \
+            (sumstats['nudge_weights'] / sumstats['N'])
+        sumstats = sumstats.drop(columns=['nudge_weights'])
+        for l2_col in ref_ld_cnames:
+            nudge_col = l2_col.replace('L2','nudge')
+            sumstats[l2_col] = sumstats[l2_col] + \
+                (sumstats[nudge_col] / sumstats['N'])
+    else :
+        sumstats = _merge_and_log(ref_ld, sumstats, 'reference panel LD', log)
+        sumstats = _merge_and_log(sumstats, w_ld, 'regression SNP LD', log)
     w_ld_cname = sumstats.columns[-1]
-    ref_ld_cnames = ref_ld.columns[1:len(ref_ld.columns)]
     return M_annot, w_ld_cname, ref_ld_cnames, sumstats, novar_cols
 
 def cell_type_specific(args, log):
