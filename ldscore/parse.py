@@ -123,7 +123,7 @@ def ldscore_nudge_fromlist(flist, num=None, gxe_file=None):
         if gxe_file is None:
             raise ValueError('gxe file must be passed if using the gxe flag')
         kurt = read_csv(gxe_file, header=None).values[:,0]
-        log.log(kurt)
+        print(kurt)
         # Evaluate m - this should be changed to common=False, when we have the right files.
         m = M(fh, num, common=False)
         chrs = get_present_chrs(fh, num+1)
